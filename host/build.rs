@@ -32,6 +32,16 @@ fn main() {
         fs::create_dir_all(parent).expect("failed to create output directory");
     }
 
+    if dst.exists() {
+        if dst.is_dir() {
+            fs::remove_dir_all(&dst)
+                .unwrap_or_else(|e| panic!("failed to remove existing directory {dst:?}: {e}"));
+        } else {
+            fs::remove_file(&dst)
+                .unwrap_or_else(|e| panic!("failed to remove existing file {dst:?}: {e}"));
+        }
+    }
+
     fs::copy(&elf_path, &dst)
         .unwrap_or_else(|e| panic!("failed to copy {elf_path:?} to {dst:?}: {e}"));
 
