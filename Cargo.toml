@@ -2,6 +2,6 @@
 members = [
     "host",
     "common",
+    "ebpf",
 ]
-exclude = ["ebpf"]
 resolver = "2"
