@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "host",
-    "ebpf",
     "common",
 ]
+exclude = ["ebpf"]
 resolver = "2"

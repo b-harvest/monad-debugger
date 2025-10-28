@@ -1,24 +1,21 @@
 #[cfg(target_os = "linux")]
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 #[cfg(target_os = "linux")]
 use aya::{
     include_bytes_aligned,
-    maps::perf::AsyncPerfEventArray,
+    maps::perf::{AsyncPerfEventArray, Events},
     programs::{Xdp, XdpFlags},
     util::online_cpus,
-    Bpf,
+    Ebpf,
 };
 #[cfg(target_os = "linux")]
-use aya_log::BpfLogger;
+use aya_log::EbpfLogger;
 #[cfg(target_os = "linux")]
 use bytes::BytesMut;
 #[cfg(target_os = "linux")]
 use monad_debugger_common::PacketEvent;
 #[cfg(target_os = "linux")]
 use tracing_subscriber::EnvFilter;
-
-#[cfg(target_os = "linux")]
-unsafe impl aya::Pod for PacketEvent {}
 
 #[cfg(target_os = "linux")]
 const BPF_OBJECT: &[u8] =
@@ -36,8 +33,8 @@ async fn main() -> Result<()> {
         .nth(1)
         .context("usage: monad-debugger-host <IFACE>")?;
 
-    let mut bpf = Bpf::load(BPF_OBJECT)?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
+    let mut bpf = Ebpf::load(BPF_OBJECT)?;
+    if let Err(e) = EbpfLogger::init(&mut bpf) {
         tracing::warn!(error = ?e, "failed to initialize eBPF logger");
     }
 
@@ -47,41 +44,50 @@ async fn main() -> Result<()> {
         .try_into()
         .context("program 'capture' is not an XDP program")?;
     program.load()?;
-    let _link_id = program.attach(&iface, XdpFlags::default())?;
+    let _link = program.attach(&iface, XdpFlags::default())?;
 
-    let mut events = AsyncPerfEventArray::try_from(bpf.take_map("PACKET_EVENTS")?)?;
+    let map = bpf
+        .take_map("PACKET_EVENTS")
+        .ok_or_else(|| anyhow!("PACKET_EVENTS map not found"))?;
+    let mut events = AsyncPerfEventArray::try_from(map)?;
 
-    for cpu_id in online_cpus().context("unable to list online CPUs")? {
+    let cpus = online_cpus().map_err(|(msg, err)| anyhow!("{msg}: {err}"))?;
+    for cpu_id in cpus {
         let mut buf = events
             .open(cpu_id, None)
-            .with_context(|| format!("failed to open perf buffer on CPU {}", cpu_id))?;
+            .with_context(|| format!("failed to open perf buffer on CPU {cpu_id}"))?;
 
         tokio::spawn(async move {
             let mut buffers = (0..16)
-                .map(|_| BytesMut::with_capacity(core::mem::size_of::<PacketEvent>() * 32))
+                .map(|_| BytesMut::with_capacity(core::mem::size_of::<PacketEvent>()))
                 .collect::<Vec<_>>();
 
             loop {
-                let read_events = match buf.read_events(&mut buffers).await {
-                    Ok(events) => events as usize,
+                let Events { read, lost } = match buf.read_events(&mut buffers).await {
+                    Ok(events) => events,
                     Err(e) => {
                         tracing::error!(error = ?e, "perf buffer read failure");
                         continue;
                     }
                 };
 
-                for buf in buffers.iter_mut().take(read_events) {
-                    if buf.len() < core::mem::size_of::<PacketEvent>() {
+                if lost > 0 {
+                    tracing::warn!(lost, "perf buffer lost events");
+                }
+
+                for buffer in buffers.iter_mut().take(read) {
+                    let len = buffer.len();
+                    if len < core::mem::size_of::<PacketEvent>() {
                         tracing::warn!(
-                            len = buf.len(),
+                            len,
                             expected = core::mem::size_of::<PacketEvent>(),
                             "perf buffer returned undersized payload"
                         );
-                        buf.clear();
+                        buffer.clear();
                         continue;
                     }
 
-                    let event = unsafe { (buf.as_ptr() as *const PacketEvent).read_unaligned() };
+                    let event = unsafe { (buffer.as_ptr() as *const PacketEvent).read_unaligned() };
 
                     tracing::info!(
                         timestamp_ns = event.timestamp_ns,
@@ -91,7 +97,7 @@ async fn main() -> Result<()> {
                         "packet captured"
                     );
 
-                    buf.clear();
+                    buffer.clear();
                 }
             }
         });

@@ -3,8 +3,9 @@ name = "monad-debugger-ebpf"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "monad-debugger-ebpf"
+path = "src/main.rs"
 
 [dependencies]
 aya-ebpf = { version = "0.1.1", default-features = false }

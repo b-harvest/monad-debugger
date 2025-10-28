@@ -1,10 +1,16 @@
 #![cfg_attr(
-    not(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel")),
-    compile_error!("monad-debugger-ebpf must be built for a BPF target")
+    any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"),
+    no_std
 )]
-#![no_std]
-#![no_main]
+#![cfg_attr(
+    any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"),
+    no_main
+)]
 
+#[cfg(not(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel")))]
+fn main() {}
+
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 use aya_ebpf::{
     bindings::xdp_action,
     helpers::bpf_ktime_get_ns,
@@ -12,11 +18,14 @@ use aya_ebpf::{
     maps::PerfEventArray,
     programs::XdpContext,
 };
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 use monad_debugger_common::PacketEvent;
 
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 #[map(name = "PACKET_EVENTS")]
 static mut PACKET_EVENTS: PerfEventArray<PacketEvent> = PerfEventArray::new(0);
 
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 #[xdp(name = "capture")]
 pub fn capture(ctx: XdpContext) -> u32 {
     match try_capture(&ctx) {
@@ -25,6 +34,7 @@ pub fn capture(ctx: XdpContext) -> u32 {
     }
 }
 
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 fn try_capture(ctx: &XdpContext) -> Result<u32, u32> {
     let length = ctx.data_end().saturating_sub(ctx.data());
     let event = PacketEvent {
@@ -44,6 +54,7 @@ fn try_capture(ctx: &XdpContext) -> Result<u32, u32> {
     Ok(xdp_action::XDP_PASS)
 }
 
+#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {
