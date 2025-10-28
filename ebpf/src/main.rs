@@ -29,6 +29,7 @@ pub fn capture(ctx: XdpContext) -> u32 {
 }
 
 #[cfg(target_arch = "bpf")]
+#[allow(static_mut_refs)]
 fn try_capture(ctx: &XdpContext) -> Result<u32, u32> {
     let length = ctx.data_end().saturating_sub(ctx.data());
     let event = PacketEvent {
