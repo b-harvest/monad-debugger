@@ -20,7 +20,7 @@ use monad_debugger_common::PacketEvent;
 static mut PACKET_EVENTS: PerfEventArray<PacketEvent> = PerfEventArray::new(0);
 
 #[cfg(target_arch = "bpf")]
-#[xdp(name = "capture")]
+#[xdp]
 pub fn capture(ctx: XdpContext) -> u32 {
     match try_capture(&ctx) {
         Ok(ret) => ret,
