@@ -24,12 +24,8 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     let build_root = out_dir.join("monad-debugger-ebpf");
 
-    let mut elf_path = find_elf(&build_root)
+    let elf_path = find_elf(&build_root)
         .unwrap_or_else(|| panic!("failed to locate built eBPF object under {build_root:?}"));
-    if elf_path.is_dir() {
-        elf_path = walk_for_elf(&elf_path)
-            .unwrap_or_else(|| panic!("failed to locate eBPF ELF inside directory {elf_path:?}"));
-    }
     let dst = out_dir.join("monad-debugger-ebpf.bpf.o");
 
     if let Some(parent) = dst.parent() {
@@ -48,24 +44,6 @@ fn find_elf(root: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let candidates = [
-        root.join("bpfel-unknown-none")
-            .join("release")
-            .join("monad-debugger-ebpf"),
-        root.join("release").join("monad-debugger-ebpf"),
-        root.join("monad-debugger-ebpf"),
-    ];
-
-    for candidate in &candidates {
-        if candidate.is_file() {
-            return Some(candidate.clone());
-        }
-    }
-
-    walk_for_elf(root)
-}
-
-fn walk_for_elf(root: &Path) -> Option<PathBuf> {
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let entries = match fs::read_dir(&dir) {
