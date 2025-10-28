@@ -1,0 +1,17 @@
+[package]
+name = "monad-debugger-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+aya-ebpf = { version = "0.1.1", default-features = false }
+monad-debugger-common = { path = "../common", default-features = false }
+
+[profile.release]
+debug = false
+debug-assertions = false
+strip = "symbols"
+lto = true

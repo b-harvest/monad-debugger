@@ -1,0 +1,19 @@
+[package]
+name = "monad-debugger-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+bytes = "1.5"
+tokio = { version = "1.36", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+
+[build-dependencies]
+aya-build = "0.1.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+aya = { version = "0.13.1", features = ["async_tokio"] }
+aya-log = "0.2.1"
+monad-debugger-common = { path = "../common" }
