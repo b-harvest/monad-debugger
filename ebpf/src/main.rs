@@ -1,16 +1,10 @@
-#![cfg_attr(
-    any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"),
-    no_std
-)]
-#![cfg_attr(
-    any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"),
-    no_main
-)]
+#![cfg_attr(target_arch = "bpf", no_std)]
+#![cfg_attr(target_arch = "bpf", no_main)]
 
-#[cfg(not(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel")))]
+#[cfg(not(target_arch = "bpf"))]
 fn main() {}
 
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 use aya_ebpf::{
     bindings::xdp_action,
     helpers::bpf_ktime_get_ns,
@@ -18,14 +12,14 @@ use aya_ebpf::{
     maps::PerfEventArray,
     programs::XdpContext,
 };
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 use monad_debugger_common::PacketEvent;
 
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 #[map(name = "PACKET_EVENTS")]
 static mut PACKET_EVENTS: PerfEventArray<PacketEvent> = PerfEventArray::new(0);
 
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 #[xdp(name = "capture")]
 pub fn capture(ctx: XdpContext) -> u32 {
     match try_capture(&ctx) {
@@ -34,7 +28,7 @@ pub fn capture(ctx: XdpContext) -> u32 {
     }
 }
 
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 fn try_capture(ctx: &XdpContext) -> Result<u32, u32> {
     let length = ctx.data_end().saturating_sub(ctx.data());
     let event = PacketEvent {
@@ -46,15 +40,13 @@ fn try_capture(ctx: &XdpContext) -> Result<u32, u32> {
     };
 
     unsafe {
-        PACKET_EVENTS
-            .output(ctx, &event, 0)
-            .map_err(|_| xdp_action::XDP_ABORTED)?;
+        PACKET_EVENTS.output(ctx, &event, 0);
     }
 
     Ok(xdp_action::XDP_PASS)
 }
 
-#[cfg(any(target_arch = "bpf", target_arch = "bpfeb", target_arch = "bpfel"))]
+#[cfg(target_arch = "bpf")]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {
