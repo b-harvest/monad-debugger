@@ -24,8 +24,12 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     let build_root = out_dir.join("monad-debugger-ebpf");
 
-    let elf_path = find_elf(&build_root)
+    let mut elf_path = find_elf(&build_root)
         .unwrap_or_else(|| panic!("failed to locate built eBPF object under {build_root:?}"));
+    if elf_path.is_dir() {
+        elf_path = walk_for_elf(&elf_path)
+            .unwrap_or_else(|| panic!("failed to locate eBPF ELF inside directory {elf_path:?}"));
+    }
     let dst = out_dir.join("monad-debugger-ebpf.bpf.o");
 
     if let Some(parent) = dst.parent() {
