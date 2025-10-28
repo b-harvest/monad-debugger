@@ -1,4 +1,7 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 fn main() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
@@ -21,22 +24,45 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     let build_root = out_dir.join("monad-debugger-ebpf");
 
-    let elf_path = locate_elf(&build_root)
+    let elf_path = find_elf(&build_root)
         .unwrap_or_else(|| panic!("failed to locate built eBPF object under {build_root:?}"));
     let dst = out_dir.join("monad-debugger-ebpf.bpf.o");
+
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).expect("failed to create output directory");
+    }
 
     fs::copy(&elf_path, &dst)
         .unwrap_or_else(|e| panic!("failed to copy {elf_path:?} to {dst:?}: {e}"));
 
+    println!("cargo:warning=using eBPF object {:?}", elf_path);
     println!("cargo:rerun-if-changed=../ebpf/src");
 }
 
-fn locate_elf(root: &PathBuf) -> Option<PathBuf> {
+fn find_elf(root: &Path) -> Option<PathBuf> {
     if !root.exists() {
         return None;
     }
 
-    let mut stack = vec![root.clone()];
+    let candidates = [
+        root.join("bpfel-unknown-none")
+            .join("release")
+            .join("monad-debugger-ebpf"),
+        root.join("release").join("monad-debugger-ebpf"),
+        root.join("monad-debugger-ebpf"),
+    ];
+
+    for candidate in &candidates {
+        if candidate.is_file() {
+            return Some(candidate.clone());
+        }
+    }
+
+    walk_for_elf(root)
+}
+
+fn walk_for_elf(root: &Path) -> Option<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
@@ -45,18 +71,9 @@ fn locate_elf(root: &PathBuf) -> Option<PathBuf> {
 
         for entry in entries.flatten() {
             let path = entry.path();
-            let ty = match entry.file_type() {
-                Ok(ty) => ty,
-                Err(_) => continue,
-            };
-
-            if ty.is_file() && is_matching_file(&path) {
-                if let Ok(meta) = path.metadata() {
-                    if meta.len() > 0 {
-                        return Some(path);
-                    }
-                }
-            } else if ty.is_dir() {
+            if path.is_file() && is_elf_name(path.file_name()) {
+                return Some(path);
+            } else if path.is_dir() {
                 stack.push(path);
             }
         }
@@ -65,12 +82,10 @@ fn locate_elf(root: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-fn is_matching_file(path: &PathBuf) -> bool {
-    match path.file_name() {
-        Some(name) => {
-            let name = name.to_string_lossy();
-            name == "monad-debugger-ebpf" || name.starts_with("monad-debugger-ebpf.")
-        }
-        None => false,
+fn is_elf_name(name: Option<&std::ffi::OsStr>) -> bool {
+    match name.and_then(|s| s.to_str()) {
+        Some("monad-debugger-ebpf") => true,
+        Some(s) if s.starts_with("monad-debugger-ebpf.") => true,
+        _ => false,
     }
 }
